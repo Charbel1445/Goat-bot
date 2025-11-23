@@ -1,270 +1,246 @@
-const { post, get } = require("axios");
+const axios = require('axios');
+const validUrl = require('valid-url');
+const fs = require('fs');
+const path = require('path');
+const ytSearch = require('yt-search');
+const { v4: uuidv4 } = require('uuid');
+
+const API_ENDPOINT = "https://shizuai.vercel.app/chat";
+const CLEAR_ENDPOINT = "https://shizuai.vercel.app/chat/clear";
+const YT_API = "http://65.109.80.126:20409/aryan/yx";
+
+const TMP_DIR = path.join(__dirname, 'tmp');
+if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR);
+
+// Téléchargement fichier
+const downloadFile = async (url, ext) => {
+const filePath = path.join(TMP_DIR, ${uuidv4()}.${ext});
+const response = await axios.get(url, { responseType: 'arraybuffer' });
+fs.writeFileSync(filePath, Buffer.from(response.data));
+return filePath;
+};
+
+// Reset conversation
+const resetConversation = async (api, event, message) => {
+api.setMessageReaction("♻️", event.messageID, () => {}, true);
+try {
+await axios.delete(${CLEAR_ENDPOINT}/${event.senderID});
+return message.reply(✅ Conversation reset for UID: ${event.senderID});
+} catch (error) {
+return message.reply("❌ Reset failed. Try again.");
+}
+};
+
+// YouTube handler
+const handleYouTube = async (api, event, message, args) => {
+const option = args[0];
+if (!["-v", "-a"].includes(option)) {
+return message.reply("❌ Usage: youtube [-v|-a] <search or URL>");
+}
+
+const query = args.slice(1).join(" ");
+if (!query) return message.reply("❌ Provide a search query or URL.");
+
+const sendFile = async (url, type) => {
+try {
+const { data } = await axios.get(${YT_API}?url=${encodeURIComponent(url)}&type=${type});
+const downloadUrl = data.download_url;
+
+if (!data.status || !downloadUrl) throw new Error();  
+
+  const filePath = path.join(TMP_DIR, `yt_${Date.now()}.${type}`);  
+  const writer = fs.createWriteStream(filePath);  
+  const stream = await axios({ url: downloadUrl, responseType: "stream" });  
+
+  stream.data.pipe(writer);  
+
+  await new Promise((resolve, reject) => {  
+    writer.on("finish", resolve);  
+    writer.on("error", reject);  
+  });  
+
+  await message.reply({ attachment: fs.createReadStream(filePath) });  
+  fs.unlinkSync(filePath);  
+
+} catch {  
+  message.reply(`❌ Failed to download ${type}.`);  
+}
+
+};
+
+if (query.startsWith("http"))
+return await sendFile(query, option === "-v" ? "mp4" : "mp3");
+
+try {
+const results = (await ytSearch(query)).videos.slice(0, 6);
+if (results.length === 0) return message.reply("❌ No results found.");
+
+let list = "";  
+results.forEach((v, i) => list += `${i + 1}. 🎬 ${v.title} (${v.timestamp})\n`);  
+
+const thumbs = await Promise.all(  
+  results.map(v =>  
+    axios.get(v.thumbnail, { responseType: "stream" }).then(res => res.data)  
+  )  
+);  
+
+api.sendMessage(  
+  {  
+    body: list + "\nReply with number (1-6) to download.",  
+    attachment: thumbs  
+  },  
+  event.threadID,  
+  (err, info) => {  
+    global.GoatBot.onReply.set(info.messageID, {  
+      commandName: "ai",  
+      messageID: info.messageID,  
+      author: event.senderID,  
+      results,  
+      type: option  
+    });  
+  },  
+  event.messageID  
+);
+
+} catch {
+message.reply("❌ Failed to search YouTube.");
+}
+};
+
+// AI handler
+const handleAIRequest = async (api, event, userInput, message) => {
+const args = userInput.split(" ");
+const first = args[0]?.toLowerCase();
+
+if (["youtube", "yt", "ytb"].includes(first)) {
+return await handleYouTube(api, event, message, args.slice(1));
+}
+
+const userId = event.senderID;
+let imageUrl = null;
+
+api.setMessageReaction("⏳", event.messageID, () => {}, true);
+
+const urlMatch = userInput.match(/(https?://[^\s]+)/)?.[0];
+if (urlMatch && validUrl.isWebUri(urlMatch)) {
+imageUrl = urlMatch;
+userInput = userInput.replace(urlMatch, "").trim();
+}
+
+if (!userInput && !imageUrl) {
+api.setMessageReaction("❌", event.messageID, () => {}, true);
+return message.reply("💬 Provide a message or image.");
+}
+
+try {
+const response = await axios.post(API_ENDPOINT, {
+uid: userId,
+message: userInput,
+image_url: imageUrl
+});
+
+let { reply: textReply, image_url: genImageUrl } = response.data;  
+let finalReply = textReply || "AI Response:";  
+
+finalReply = finalReply  
+  .replace(/🎀\s*𝗦𝗵𝗶𝘇𝘂/gi, "🎀 𝗠𝗮𝘀𝘁𝗲𝗿 𝗕𝗼𝘁")  
+  .replace(/Shizu/gi, "Master Bot")  
+  .replace(/Aryan Chauhan/gi, "Master Charbel");  
+
+const attachments = [];  
+
+if (genImageUrl) {  
+  attachments.push(fs.createReadStream(await downloadFile(genImageUrl, "jpg")));  
+}  
+
+const sentMessage = await message.reply({  
+  body: finalReply,  
+  attachment: attachments.length ? attachments : undefined  
+});  
+
+global.GoatBot.onReply.set(sentMessage.messageID, {  
+  commandName: "ai",  
+  author: userId  
+});  
+
+api.setMessageReaction("✅", event.messageID, () => {}, true);
+
+} catch (error) {
+api.setMessageReaction("❌", event.messageID, () => {}, true);
+message.reply("⚠️ AI Error:\n" + error.message);
+}
+};
+
 module.exports = {
-  config: { 
-name: "ai", 
-category: "ai" 
+config: {
+name: "ai",
+version: "3.0.0",
+author: "Christus",
+role: 0,
+category: "ai",
+longDescription: {
+en: "AI + YouTube: Chat, Images, Music, Video, Downloader"
 },
-  onStart() {},  
-  onChat: async ({
-     message: { reply: r },
-     args: a, 
-     event: { senderID: s, threadID: t, body: b, messageReply: msg }, 
-    commandName, 
-    usersData, 
-    globalData,
-    role 
-}) => {
-const cmd = `${module.exports.config.name}`;
-const pref = `${utils.getPrefix(t)}`;
-const pr = [`${pref}${cmd}`, `${cmd}`];
-const _m = "gpt";
- const { name, settings = {}, gender } = await usersData.get(s) || {};
-const ownKeys = Object.keys(settings.own || {});
-const ownSettings = settings.own || {}; 
-let Gpt = await globalData.get(_m);  
-     const gen = gender === 2 ? 'male' : 'female';
-      const sys = settings.system || "helpful";
-const csy = settings.own ? Object.keys(settings.own).map(key => ({ [key]: settings.own[key] })) : [];
-let customSystem = [
-    {
-default: "tu es un assistant utile"
-    },   
-];
-if (Array.isArray(csy) && csy.length > 0) {
-    customSystem = customSystem.concat(csy);
+guide: {
+en: .ai [message]   .ai youtube -v [query/url]   .ai youtube -a [query/url]   .ai clear
 }
-    if (a[0] && pr.some(x => a[0].toLowerCase() === x)) {
-    const p = a.slice(1);
- let assistant = [
-"lover", 
-"helpful", 
-"friendly", 
-"toxic", 
-"godmode", 
-"horny"
-/*"makima", 
-"godmode", 
-"default"*/
-];
-const userAssistant = Object.keys(ownSettings).filter(key => ownSettings[key]);
-const ass = assistant.filter(key => !userAssistant.includes(key));
-assistant.push(...userAssistant);
-const models = {
-     1: "llama", 
-     2: "gemini" 
-          };
-    let ads = "";
-if(role === 2) {
-ads = `For admin only:\nTo change model use:\n${cmd} model <num>\nTo allow NSFW use:\n${cmd} nsfw on/off`;
-}
-
-let url = undefined;
-if (msg && ["photo", "audio", "sticker"].includes(msg.attachments[0]?.type)) {
-  url = { link: msg.attachments[0].url, type: msg.attachments[0].type === "photo" || mgs.attachments[0].type === "sticker" ? "image" : "mp3" };
-}
-let output = ass.map((key, i) => `${i + 1}. ${key.charAt(0).toUpperCase() + key.slice(1)}`).join("\n");
-if (userAssistant.length > 0) {
-  output += `\n\nYour own assistant:\n` +
-    userAssistant.map((key, i) => `${i + 1}. ${key.charAt(0).toUpperCase() + key.slice(1)}`).join("\n");
-}
-
-     if (!p.length) return r(`Hello ${name}, choose ur assistant:\n`+ output + `\nexample: ${cmd} set friendly\n\n${cmd} system <add/delete/update> <system name> <your instructions>\n\nexample:\n${cmd} system add cat You are a cat assistant\n${cmd} delete cat\n\n${ads}`)
- const mods = await globalData.get(_m) || { data: {} };
-    const [__, _, sy, key, ...rest] = a;
-    const value = rest.join(" ");
-if(p[0].toLowerCase() === "system") {
-if(p.length < 2) {
-return r(`Usage:\n${cmd} system <add/delete/update> <system name> <your instructions>\n\nexample:\n${cmd} system add cat You are a cat assistant\n${cmd} system delete cat`);
-} 
-    if (sy === "add" || sy === "update") {
-      if (!key || !value) return r(`Please add system name and system prompt.\nExample: system ${sy} cat "You are a cat assistant"`);
-      if (sy === "add" && (assistant.includes(key) || ownKeys.length >= 7 && !ownKeys.includes(key))) return r("You cannot add more systems.");
-      settings.own = { ...settings.own, [key]: value };
-await usersData.set(s, {
-  settings: {
-    ...settings,
-    own: settings.own
-  }
-});
-      return r(`System "${key}" ${sy === "add" ? "added" : "updated"} successfully.`);
-    }
-    if (sy === "delete" && ownKeys.includes(key)) {
-      delete settings.own[key];
-await usersData.set(s, {
-  settings: {
-    ...settings,
-    own: settings.own
-  }
-});
-      return r(`System "${key}" deleted successfully.`);
-    }
-}
-
-   if (p[0].toLowerCase() === "set" && p[1]?.toLowerCase()) {
-        const choice = p[1].toLowerCase();
-       if (assistant.includes(choice)) {
-        await usersData.set(s, { settings: { ...settings, system: choice } });
-
-          return r(`Assistant changed to ${choice}`);
-        }
-        return r(`Invalid choice.\n${output}\nExample: ${cmd} set friendly`);
-      }
-if (p[0] === 'nsfw') {
-if (role < 2) {
-  return r("You don't have permission to use this.");
-}
-      if (p[1].toLowerCase() === 'on') {
-        mods.data.nsfw = true; 
-        await globalData.set(_m, mods);
-     return r(`Successfully turned on NSFW. NSFW features are now allowed to use.`);
-      } else if (p[1].toLowerCase() === 'off') {
-        mods.data.nsfw = false; 
-        await globalData.set(_m, mods);
-        return r(`Successfully turned off NSFW. NSFW features are now disabled.`);
-      } else {
-        return r(`Invalid usage: to toggle NSFW, use 'nsfw on' or 'nsfw off'.`);
-      }
-    }
-if (p[0].toLowerCase() === "model") {
-if (role < 2) {
-  return r("You don't have permission to use this.");
-}
-  const _model = models[p[1]];  
-  if (_model) {
-    try {
-      mods.data.model = _model;
-      await globalData.set(_m, mods);
- return r(`Successfully changed model to ${_model}`);
-    } catch (error) {
-return r(`Error setting model: ${error}`);
-    }
-  } else {
-return r(`Please choose only number\navailabale model\n${Object.entries(models).map(([id, name]) => `${id}: ${name}`).join("\n")}\n\nexample: ${pref}${cmd} model 1`);
-  }
-}
-
-if (!Gpt || Gpt === "undefined") {
-  await globalData.create(_m, { data: { model: "llama", nsfw: false } }); 
-  Gpt = await globalData.get(_m);
-}
-const { data: { nsfw, model } } = Gpt;
-  const { result, media } = await ai(p.join(" "), s, name, sys, gen, model, nsfw, customSystem, url);
-
-let attachments;
-if (media && media.startsWith("https://cdn")) {
-    attachments = await global.utils.getStreamFromURL(media, "spotify.mp3");
-} else if (media) {
-    attachments = await global.utils.getStreamFromURL(media);
-}
-
-const rs = {
-    body: result.replace(/😂/g, "🤭"),
-    mentions: [{ id: s, tag: name }]
-};
-
-if (attachments) {
-   rs.attachment = attachments;
-}
-
-  const { messageID: m } = await r(rs);
-  global.GoatBot.onReply.set(m, { commandName, s, model, nsfw, customSystem });
-    }
-  },
- onReply: async ({ 
-    Reply: { s, commandName, model, nsfw, customSystem }, 
-    message: { reply: r }, 
-    args: a, 
-    event: { senderID: x, body: b, attachments, threadID: t }, 
-    usersData 
-}) => {
-const cmd = `${module.exports.config.name}`;
-const pref = `${utils.getPrefix(t)}`;
-    const { name, settings, gender } = await usersData.get(x);
-    const sys = settings.system || "helpful";
-    if (s !== x || b?.toLowerCase().startsWith(cmd) || b?.toLowerCase().startsWith(pref + cmd) || b?.toLowerCase().startsWith(pref + "unsend")) return;
-
- let url = null;
-let prompt = a.join(" ");
-if (!b.includes(".")) {
-    const img = attachments?.[0];
-    if (img) {
-        if (img.type === "sticker" && img.ID === "369239263222822") {
-            prompt = "👍";
-            //url = null;
-        } else {
-            url = (img.type === "sticker") 
-                ? { link: img.url, type: "image" } 
-                : (img.type === "photo") 
-                ? { link: img.url, type: "image" } 
-                : (img.type === "audio") 
-                ? { link: img.url, type: "mp3" } 
-                : null;
-            if (url) prompt = ".";
-        }
-    }
-}
-   
-    
-const { result, media } = await ai(prompt || ".", s, name, sys, gender === 2 ? 'male' : 'female', model, nsfw, customSystem, url);
-const rs = {
-    body: result.replace(/😂/g, "🤭"),
-    mentions: [{ id: x, tag: name }]
-};
-if (media) {
-    if (media.startsWith('https://cdn')) {
-        rs.attachment = await global.utils.getStreamFromURL(media, "spotify.mp3");
-    } else {
-        rs.attachment = await global.utils.getStreamFromURL(media);
-    }
-}
- const { messageID } = await r(rs);       global.GoatBot.onReply.set(messageID, { commandName, s, sys, model, nsfw,  customSystem, url });
-}
-};
-//llama3-70b-8192
-async function ai(prompt, id, name, system, gender, model, nsfw, customSystem, link = "") {
-  const g4o = async (p, m = "gemma2-9b-it") => post(atob(String.fromCharCode(...atob((await get(atob("aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2p1bnpkZXZvZmZpY2lhbC90ZXN0L3JlZnMvaGVhZHMvbWFpbi90ZXN0LnR4dA=="))).data).split(" ").map(Number))),
-    { 
-      id, 
-      prompt: p, 
-      name, 
-      model, 
-      system, 
-   customSystem, //array [{ }]
-      gender, 
-      nsfw,
-      url: link ? link : undefined, /*@{object}  { link, type: "image or mp3" } */
-config: [{ 
- gemini: {
- apikey: "AIzaSyAqigdIL9j61bP-KfZ1iz6tI9Q5Gx2Ex_o", 
-model:  "gemini-1.5-flash"
 },
-llama: { model: m }
-}]
-    },
-    {
-      headers: { 
-        'Content-Type': 'application/json', 
-        'Authorization': 'Bearer test' 
-      } 
-    });
 
-  try {
-    let res = await g4o(prompt);
-    if (["i cannot", "i can't"].some(x => res.data.result.toLowerCase().startsWith(x))) {
-      await g4o("clear");
-      res = await g4o(prompt, "llama-3.1-70b-versatile");
-    }
-    return res.data;
-  } catch {
-    try {
-    await g4o("clear");
-      return (await g4o(prompt, "llama-3.1-70b-versatile")).data;
-    } catch (err) {
-      const e = err.response?.data;
-      const errorMessage = typeof e === 'string' ? e : JSON.stringify(e);
+onStart: async ({ api, event, args, message }) => {
+const userInput = args.join(" ").trim();
+if (!userInput) return message.reply("❗ Please enter a message.");
 
-      return errorMessage.includes("Payload Too Large") ? { result: "Your text is too long" } :            errorMessage.includes("Service Suspended") ? { result: "The API has been suspended, please wait for the dev to replace the API URL"  }:
-         { result: e?.error || e || err.message };
-    }
-  }
-    }
+if (["clear", "reset"].includes(userInput.toLowerCase())) {  
+  return await resetConversation(api, event, message);  
+}  
+
+return await handleAIRequest(api, event, userInput, message);
+
+},
+
+onReply: async ({ api, event, Reply, message }) => {
+if (event.senderID !== Reply.author) return;
+
+const userInput = event.body?.trim();  
+if (!userInput) return;  
+
+if (["clear", "reset"].includes(userInput.toLowerCase())) {  
+  return await resetConversation(api, event, message);  
+}  
+
+if (Reply.results && Reply.type) {  
+  const idx = parseInt(userInput);  
+  if (isNaN(idx) || idx < 1 || idx > Reply.results.length)  
+    return message.reply("❌ Invalid selection (1-6).");  
+
+  const selected = Reply.results[idx - 1];  
+  const type = Reply.type === "-v" ? "mp4" : "mp3";  
+
+  try {  
+    const { data } = await axios.get(  
+      `${YT_API}?url=${encodeURIComponent(selected.url)}&type=${type}`  
+    );  
+    const filePath = await downloadFile(data.download_url, type);  
+
+    await message.reply({ attachment: fs.createReadStream(filePath) });  
+    fs.unlinkSync(filePath);  
+  } catch {  
+    message.reply(`❌ Failed to download ${type}.`);  
+  }  
+} else {  
+  return await handleAIRequest(api, event, userInput, message);  
+}
+
+},
+
+onChat: async ({ api, event, message }) => {
+const body = event.body?.trim();
+if (!body?.toLowerCase().startsWith("ai ")) return;
+
+const userInput = body.slice(3).trim();  
+if (!userInput) return;  
+
+return await handleAIRequest(api, event, userInput, message);
+
+}
+};
