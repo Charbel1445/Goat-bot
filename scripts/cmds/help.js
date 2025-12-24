@@ -8,133 +8,106 @@ const doNotDelete = "[ 🧩 | 𝐊𝐄𝐍 𝐊𝐀𝐍𝐄𝐊𝐈 | 🧩 ]";
 module.exports = {
     config: {
         name: "help",
-        version: "1.21", 
+        version: "1.25", 
         author: "𝑹𝒊𝒏𝒏𝒈𝒂𝒏 (Corrigé par Gemini)",
         countDown: 5,
         role: 0,
         shortDescription: {
-            en: "Affiche l'aide et la liste des commandes du bot en deux pages.",
+            en: "Affiche la liste des commandes par page.",
         },
         longDescription: {
-            en: "Affiche une liste complète des commandes par catégorie sur deux messages et le détail d'utilisation d'une commande spécifique.",
+            en: "Affiche les commandes disponibles. Utilisez 'help4 2' pour voir la suite.",
         },
         category: "info",
         guide: {
-            en: "{pn} : Liste de toutes les commandes (Page 1/2).\n{pn} <nom_commande> : Affiche les détails d'une commande.",
+            en: "{pn} : Page 1\n{pn} 2 : Page 2\n{pn} <nom_commande> : Détails",
         },
         priority: 1,
     },
     onStart: async function ({ message, args, event, threadsData, role }) {
         const { threadID } = event;
-        const threadData = await threadsData.get(threadID);
         const prefix = getPrefix(threadID);
 
         const roleTextToString = (role) => {
             switch (role) {
-                case 0: return "0 (Tous les utilisateurs)";
-                case 1: return "1 (Administrateurs de groupe)";
-                case 2: return "2 (Administrateur du bot)";
-                default: return "Rôle inconnu";
+                case 0: return "0 (Tous)";
+                case 1: return "1 (Admin Groupe)";
+                case 2: return "2 (Admin Bot)";
+                default: return "Inconnu";
             }
         };
 
-        if (args.length === 0) {
+        // --- Logique d'affichage de la liste ---
+        if (args.length === 0 || args[0] === "1" || args[0] === "2") {
+            const page = (args[0] === "2") ? 2 : 1;
             const categories = {};
-            const availableCommands = new Map();
+            const availableCommands = [];
 
+            // Filtrer les commandes par rôle
             for (const [name, value] of commands) {
                 if (value.config.role <= role) {
-                    availableCommands.set(name, value);
-                    const category = value.config.category || "Uncategorized";
+                    availableCommands.push(name);
+                    const category = value.config.category || "Autres";
                     categories[category] = categories[category] || { commands: [] };
                     categories[category].commands.push(name);
                 }
             }
 
             const sortedCategories = Object.keys(categories).sort();
-            const totalCategories = sortedCategories.length;
-            const cutOffIndex = Math.ceil(totalCategories / 2);
-
-            let msg1 = "";
-            let msg2 = "";
-
-            // --- Construction de la Page 1 (Thème Tokyo Ghoul) ---
-            msg1 += `\n╭─────── ☕ ───────╮\n   𝐊𝐄𝐍 𝐊𝐀𝐍𝐄𝐊𝐈 𝐇𝐄𝐋𝐏 (𝟭/𝟮) 👁️\n╰─────── ☕ ───────╯\n`;
+            const cutOffIndex = Math.ceil(sortedCategories.length / 2);
             
-            for (let i = 0; i < cutOffIndex; i++) {
-                const category = sortedCategories[i];
-                if (categories[category].commands.length === 0) continue;
-                
-                msg1 += `\n┌── 🩸 ─── 『 ${category.toUpperCase()} 』`;
-                
+            // Sélection des catégories selon la page
+            const categoriesToShow = (page === 1) 
+                ? sortedCategories.slice(0, cutOffIndex) 
+                : sortedCategories.slice(cutOffIndex);
+
+            let msg = `\n╭─────── ☕ ───────╮\n   𝐊𝐄𝐍 𝐊𝐀𝐍𝐄𝐊𝐈 𝐇𝐄𝐋𝐏 (${page}/2) 👁️\n╰─────── ☕ ───────╯\n`;
+            
+            for (const category of categoriesToShow) {
+                msg += `\n┌── 🩸 ── 『 ${category.toUpperCase()} 』`;
                 const names = categories[category].commands.sort();
                 for (let j = 0; j < names.length; j += 3) {
                     const lineCommands = names.slice(j, j + 3).map((item) => `•${item}`);
-                    msg1 += `\n│ ${lineCommands.join(" | ")}`;
+                    msg += `\n│ ${lineCommands.join(" | ")}`;
                 }
-                msg1 += `\n└──────────── 🕸️`;
+                msg += `\n└──────────── 🕸️`;
             }
 
-            // --- Construction de la Page 2 ---
-            msg2 += `\n╭─────── ☕ ───────╮\n   𝐊𝐄𝐍 𝐊𝐀𝐍𝐄𝐊𝐈 𝐇𝐄𝐋𝐏 (𝟮/𝟮) 👁️\n╰─────── ☕ ───────╯\n`;
-            
-            for (let i = cutOffIndex; i < totalCategories; i++) {
-                const category = sortedCategories[i];
-                if (categories[category].commands.length === 0) continue;
-                
-                msg2 += `\n┌── 🩸 ─── 『 ${category.toUpperCase()} 』`;
-                
-                const names = categories[category].commands.sort();
-                for (let j = 0; j < names.length; j += 3) {
-                    const lineCommands = names.slice(j, j + 3).map((item) => `•${item}`);
-                    msg2 += `\n│ ${lineCommands.join(" | ")}`;
-                }
-                msg2 += `\n└──────────── 🕸️`;
+            if (page === 1) {
+                msg += `\n\n📖 𝑻𝒂𝒑𝒆 [ ${prefix}help4 2 ] 𝒑𝒐𝒖𝒓 𝒍𝒂 𝒔𝒖𝒊𝒕𝒆...`;
+            } else {
+                msg += `\n\n📜 𝑭𝒊𝒏 𝒅𝒆 𝒍𝒂 𝒍𝒊𝒔𝒕𝒆. (${availableCommands.length} commandes)`;
             }
-            
-            const totalCommands = availableCommands.size;
-            const footer = `\n\n\n💀 𝑱'𝒂𝒊 ${totalCommands} 𝒄𝒂𝒑𝒂𝒄𝒊𝒕𝒆́𝒔 𝒅𝒆 𝒈𝒐𝒖𝒍𝒆`;
-            const footer2 = `\n\n🗨️ 𝑻𝑨𝑷𝑬 ${prefix}𝗵𝗲𝗹𝗽4 + 𝒏𝒐𝒎 𝒑𝒐𝒖𝒓 𝒍𝒆𝒔 𝒅𝒆́𝒕𝒂𝒊𝒍𝒔`;
-            const footer3 = `\n\n☕ {%anteikugc} 𝑝𝑜𝑢𝑟 𝑟𝑒𝑗𝑜𝑖𝑛𝑑𝑟𝑒 𝑙'𝐴𝑛𝑡𝑒𝑖𝑘𝑢`;
-            const footer4 = `\n\n📜| 𝐂𝐞 𝐧'𝐞𝐬𝐭 𝐩𝐚𝐬 le monde qui est mauvais, c'est ce qu'il contient. Nous sommes tous des monstres.`;
 
-            msg2 += footer + footer2 + footer3 + footer4;
+            msg += `\n☕ {%anteikugc} 𝑝𝑜𝑢𝑟 𝑙'𝐴𝑛𝑡𝑒𝑖𝑘𝑢`;
 
-            await message.reply(msg1);
-            await message.send(msg2);
+            return message.reply(msg);
 
+        // --- Détails d'une commande spécifique ---
         } else {
             const commandName = args[0].toLowerCase();
             const command = commands.get(commandName) || commands.get(aliases.get(commandName));
 
             if (!command) {
-                await message.reply(`❌ Commande "${commandName}" introuvable.`);
-            } else {
-                const configCommand = command.config;
-                const roleText = roleTextToString(configCommand.role);
-                const author = configCommand.author || "Inconnu";
-                const longDescription = configCommand.longDescription?.en || "Pas de description détaillée.";
-                const guideBody = configCommand.guide?.en || "Pas de guide disponible.";
-                
-                const usage = guideBody.replace(/{p}/g, prefix).replace(/{n}/g, configCommand.name);
-                
-                const response = `
+                return message.reply(`❌ La commande "${commandName}" n'existe pas dans ma mémoire de goule.`);
+            }
+
+            const configCommand = command.config;
+            const usage = (configCommand.guide?.en || "Non disponible").replace(/{p}/g, prefix).replace(/{n}/g, configCommand.name).replace(/{pn}/g, prefix + configCommand.name);
+            
+            const response = `
 ╭─── 𝙆𝘼𝙉𝙀𝙆𝙄-𝙄𝙉𝙁𝙊 ───⭓
 │ 👁️ NOM : ${configCommand.name} 
 ├── 𝘿𝙀𝙏𝘼𝙄𝙇𝙎 
-│ 📝 Description: ${longDescription} 
+│ 📝 Description: ${configCommand.longDescription?.en || "..."} 
 │ 🔗 Alias : ${configCommand.aliases ? configCommand.aliases.join(", ") : "Aucun"} 
-│ ☕ Groupe: %anteikugc 
-│ 🧩 Version: ${configCommand.version || "1.0"} 
-│ 🎖️ Rôle: ${roleText} 
+│ 🎖️ Rôle: ${roleTextToString(configCommand.role)} 
 │ ⏳ Attente: ${configCommand.countDown || 1}s 
-│ ✍️ Auteur: ${author} 
 ├── 𝙐𝙏𝙄𝙇𝙄𝙎𝘼𝙏𝙄𝙊𝙉
 │ ${usage} 
 ╰━━━━━━━ 🕸️`;
 
-                await message.reply(response);
-            }
+            return message.reply(response);
         }
     },
 };
