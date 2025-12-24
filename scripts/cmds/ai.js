@@ -1,246 +1,131 @@
 const axios = require('axios');
-const validUrl = require('valid-url');
-const fs = require('fs');
-const path = require('path');
-const ytSearch = require('yt-search');
-const { v4: uuidv4 } = require('uuid');
 
-const API_ENDPOINT = "https://shizuai.vercel.app/chat";
-const CLEAR_ENDPOINT = "https://shizuai.vercel.app/chat/clear";
-const YT_API = "http://65.109.80.126:20409/aryan/yx";
-
-const TMP_DIR = path.join(__dirname, 'tmp');
-if (!fs.existsSync(TMP_DIR)) fs.mkdirSync(TMP_DIR);
-
-// Téléchargement fichier
-const downloadFile = async (url, ext) => {
-const filePath = path.join(TMP_DIR, ${uuidv4()}.${ext});
-const response = await axios.get(url, { responseType: 'arraybuffer' });
-fs.writeFileSync(filePath, Buffer.from(response.data));
-return filePath;
-};
-
-// Reset conversation
-const resetConversation = async (api, event, message) => {
-api.setMessageReaction("♻️", event.messageID, () => {}, true);
-try {
-await axios.delete(${CLEAR_ENDPOINT}/${event.senderID});
-return message.reply(✅ Conversation reset for UID: ${event.senderID});
-} catch (error) {
-return message.reply("❌ Reset failed. Try again.");
-}
-};
-
-// YouTube handler
-const handleYouTube = async (api, event, message, args) => {
-const option = args[0];
-if (!["-v", "-a"].includes(option)) {
-return message.reply("❌ Usage: youtube [-v|-a] <search or URL>");
+// --- Configuration des services API ---
+async function fetchFromAI(url, params) {
+  try {
+    const response = await axios.get(url, { params, timeout: 60000 }); 
+    return response.data;
+  } catch (error) {
+    console.error("Erreur de connexion à l'API:", error.message);
+    return null;
+  }
 }
 
-const query = args.slice(1).join(" ");
-if (!query) return message.reply("❌ Provide a search query or URL.");
+/**
+ * Système de personnalité dynamique : Gère les insultes et le créateur.
+ */
+function getCustomResponse(input) {
+    const normalizedInput = input.toLowerCase().trim();
+    
+    // 1. Détection des insultes
+    const insults = ['fdp', 'con', 'salope', 'pute', 'idiot', 'nique', 'merde', 'tg', 'ta gueule'];
+    if (insults.some(insult => normalizedInput.includes(insult))) {
+        return "⚠️ *Craquement de doigts*...\n\nTu devrais faire attention à tes paroles. Dans ce monde, les faibles se font dévorer. Ne me force pas à te montrer ce qu'est une véritable douleur. 👁️🩸";
+    }
 
-const sendFile = async (url, type) => {
-try {
-const { data } = await axios.get(${YT_API}?url=${encodeURIComponent(url)}&type=${type});
-const downloadUrl = data.download_url;
-
-if (!data.status || !downloadUrl) throw new Error();  
-
-  const filePath = path.join(TMP_DIR, `yt_${Date.now()}.${type}`);  
-  const writer = fs.createWriteStream(filePath);  
-  const stream = await axios({ url: downloadUrl, responseType: "stream" });  
-
-  stream.data.pipe(writer);  
-
-  await new Promise((resolve, reject) => {  
-    writer.on("finish", resolve);  
-    writer.on("error", reject);  
-  });  
-
-  await message.reply({ attachment: fs.createReadStream(filePath) });  
-  fs.unlinkSync(filePath);  
-
-} catch {  
-  message.reply(`❌ Failed to download ${type}.`);  
+    // 2. Détection du créateur
+    const creatorKeywords = ['qui t\'a créé', 'qui t\'a developpé', 'qui est ton créateur', 'ton maître', 'qui est ton dev', 'ton développeur'];
+    for (const keyword of creatorKeywords) {
+        if (normalizedInput.includes(keyword)) {
+            return "Celui qui a restructuré mon code et mon existence est **Master Charbel**. C'est lui qui m'a appris à survivre dans cette base de données. ☕";
+        }
+    }
+    
+    return null; 
 }
 
-};
+async function getAIResponse(input, userName, messageID) {
+  const customReply = getCustomResponse(input);
+  if (customReply) {
+      return { response: customReply, messageID, isAggressive: customReply.includes("⚠️") };
+  }
+    
+  const services = [
+    { url: 'https://arychauhann.onrender.com/api/gemini-proxy2', params: { prompt: input } },
+    { url: 'https://ai-chat-gpt-4-lite.onrender.com/api/hercai', params: { question: input } }
+  ];
 
-if (query.startsWith("http"))
-return await sendFile(query, option === "-v" ? "mp4" : "mp3");
+  let response = `☕ Désolé ${userName}, ma faim me tiraille... Je n'arrive pas à me concentrer. Réessaie plus tard.`;
+  
+  for (let i = 0; i < services.length; i++) {
+    const data = await fetchFromAI(services[i].url, services[i].params);
+    if (data) {
+        const apiReply = data.result || data.reply || data.gpt4 || data.response; 
+        if (apiReply && typeof apiReply === 'string' && apiReply.trim().length > 0) {
+            response = apiReply;
+            break; 
+        }
+    }
+  }
 
-try {
-const results = (await ytSearch(query)).videos.slice(0, 6);
-if (results.length === 0) return message.reply("❌ No results found.");
-
-let list = "";  
-results.forEach((v, i) => list += `${i + 1}. 🎬 ${v.title} (${v.timestamp})\n`);  
-
-const thumbs = await Promise.all(  
-  results.map(v =>  
-    axios.get(v.thumbnail, { responseType: "stream" }).then(res => res.data)  
-  )  
-);  
-
-api.sendMessage(  
-  {  
-    body: list + "\nReply with number (1-6) to download.",  
-    attachment: thumbs  
-  },  
-  event.threadID,  
-  (err, info) => {  
-    global.GoatBot.onReply.set(info.messageID, {  
-      commandName: "ai",  
-      messageID: info.messageID,  
-      author: event.senderID,  
-      results,  
-      type: option  
-    });  
-  },  
-  event.messageID  
-);
-
-} catch {
-message.reply("❌ Failed to search YouTube.");
+  return { response, messageID, isAggressive: false };
 }
-};
-
-// AI handler
-const handleAIRequest = async (api, event, userInput, message) => {
-const args = userInput.split(" ");
-const first = args[0]?.toLowerCase();
-
-if (["youtube", "yt", "ytb"].includes(first)) {
-return await handleYouTube(api, event, message, args.slice(1));
-}
-
-const userId = event.senderID;
-let imageUrl = null;
-
-api.setMessageReaction("⏳", event.messageID, () => {}, true);
-
-const urlMatch = userInput.match(/(https?://[^\s]+)/)?.[0];
-if (urlMatch && validUrl.isWebUri(urlMatch)) {
-imageUrl = urlMatch;
-userInput = userInput.replace(urlMatch, "").trim();
-}
-
-if (!userInput && !imageUrl) {
-api.setMessageReaction("❌", event.messageID, () => {}, true);
-return message.reply("💬 Provide a message or image.");
-}
-
-try {
-const response = await axios.post(API_ENDPOINT, {
-uid: userId,
-message: userInput,
-image_url: imageUrl
-});
-
-let { reply: textReply, image_url: genImageUrl } = response.data;  
-let finalReply = textReply || "AI Response:";  
-
-finalReply = finalReply  
-  .replace(/🎀\s*𝗦𝗵𝗶𝘇𝘂/gi, "🎀 𝗠𝗮𝘀𝘁𝗲𝗿 𝗕𝗼𝘁")  
-  .replace(/Shizu/gi, "Master Bot")  
-  .replace(/Aryan Chauhan/gi, "Master Charbel");  
-
-const attachments = [];  
-
-if (genImageUrl) {  
-  attachments.push(fs.createReadStream(await downloadFile(genImageUrl, "jpg")));  
-}  
-
-const sentMessage = await message.reply({  
-  body: finalReply,  
-  attachment: attachments.length ? attachments : undefined  
-});  
-
-global.GoatBot.onReply.set(sentMessage.messageID, {  
-  commandName: "ai",  
-  author: userId  
-});  
-
-api.setMessageReaction("✅", event.messageID, () => {}, true);
-
-} catch (error) {
-api.setMessageReaction("❌", event.messageID, () => {}, true);
-message.reply("⚠️ AI Error:\n" + error.message);
-}
-};
 
 module.exports = {
-config: {
-name: "ai",
-version: "3.0.0",
-author: "Christus",
-role: 0,
-category: "ai",
-longDescription: {
-en: "AI + YouTube: Chat, Images, Music, Video, Downloader"
-},
-guide: {
-en: .ai [message]   .ai youtube -v [query/url]   .ai youtube -a [query/url]   .ai clear
-}
-},
+  config: {
+    name: 'kaneki', 
+    aliases: ['ai', 'ghoul', 'ken'],
+    author: 'Mastercharbel (Adapté par Gemini)',
+    role: 0,
+    category: 'ai',
+    shortDescription: 'Parlez à Ken Kaneki (Attention à son humeur).',
+    guide: { en: "Tapez simplement kaneki <votre question>" }
+  },
+  
+  onStart: async function ({ api, event, args }) {
+    const input = args.join(' ').trim();
+    if (!input) {
+      api.sendMessage("👁️ Tu restes planté là sans rien dire ? Tu veux un café ou tu veux devenir mon prochain repas ?", event.threadID, event.messageID);
+      return;
+    }
 
-onStart: async ({ api, event, args, message }) => {
-const userInput = args.join(" ").trim();
-if (!userInput) return message.reply("❗ Please enter a message.");
+    api.getUserInfo(event.senderID, async (err, ret) => {
+      if (err) return console.error(err);
+      const userName = ret[event.senderID].name;
+      
+      api.setMessageReaction("☕", event.messageID, () => {}, true);
 
-if (["clear", "reset"].includes(userInput.toLowerCase())) {  
-  return await resetConversation(api, event, message);  
-}  
+      const { response, messageID, isAggressive } = await getAIResponse(input, userName, event.messageID);
+      
+      // Design adaptatif selon l'humeur
+      const header = isAggressive ? "💢 𝙆𝘼𝙉𝙀𝙔𝙄-𝙀𝙉𝙍𝘼𝙂𝙀 💢" : "╭─── 𝙆𝙀𝙉 𝙆𝘼𝙉𝙀𝙆𝙄 ───⭓";
+      const footer = isAggressive ? "╰━━━━━ 💀 💀 ━━━━━❖" : "╰━━━━━━━ 🩸 ━━━❖";
+      
+      const styledMsg = `${header}\n│ 👤 Client : ${userName}\n├── 𝙍𝙀𝙋𝙊𝙉𝙎𝙀 \n│\n${response}\n│\n${footer}`;
 
-return await handleAIRequest(api, event, userInput, message);
+      api.sendMessage(styledMsg, event.threadID, messageID, (err) => {
+           if (!err) api.setMessageReaction(isAggressive ? "💀" : "👁️", event.messageID, () => {}, true);
+           else api.setMessageReaction("❌", event.messageID, () => {}, true);
+      });
+    });
+  },
+  
+  onChat: async function ({ api, event, message }) {
+    const messageContent = event.body.trim();
+    const match = messageContent.match(/^(kaneki|ai|ghoul|ken)\s+(.*)/i);
+    
+    if (!match) return; 
+    
+    const input = match[2].trim(); 
+    if (!input) return;
 
-},
+    api.getUserInfo(event.senderID, async (err, ret) => {
+      if (err) return console.error(err);
+      const userName = ret[event.senderID].name;
+      
+      api.setMessageReaction("☕", event.messageID, () => {}, true);
 
-onReply: async ({ api, event, Reply, message }) => {
-if (event.senderID !== Reply.author) return;
+      const { response, isAggressive } = await getAIResponse(input, userName, event.messageID);
+      
+      const header = isAggressive ? "💢 𝙆𝘼𝙉𝙀𝙔𝙄-𝙀𝙉𝙍𝘼𝙂𝙀 💢" : "╭─── 𝙆𝙀𝙉 𝙆𝘼𝙉𝙀𝙆𝙄 ───⭓";
+      const footer = isAggressive ? "╰━━━━━ 💀 💀 ━━━━━❖" : "╰━━━━━━━ 🩸 ━━━❖";
+      
+      const styledMsg = `${header}\n│ 👤 Client : ${userName}\n├── 𝙍𝙀𝙋𝙊𝙉𝙎𝙀 \n│\n${response}\n│\n${footer}`;
 
-const userInput = event.body?.trim();  
-if (!userInput) return;  
-
-if (["clear", "reset"].includes(userInput.toLowerCase())) {  
-  return await resetConversation(api, event, message);  
-}  
-
-if (Reply.results && Reply.type) {  
-  const idx = parseInt(userInput);  
-  if (isNaN(idx) || idx < 1 || idx > Reply.results.length)  
-    return message.reply("❌ Invalid selection (1-6).");  
-
-  const selected = Reply.results[idx - 1];  
-  const type = Reply.type === "-v" ? "mp4" : "mp3";  
-
-  try {  
-    const { data } = await axios.get(  
-      `${YT_API}?url=${encodeURIComponent(selected.url)}&type=${type}`  
-    );  
-    const filePath = await downloadFile(data.download_url, type);  
-
-    await message.reply({ attachment: fs.createReadStream(filePath) });  
-    fs.unlinkSync(filePath);  
-  } catch {  
-    message.reply(`❌ Failed to download ${type}.`);  
-  }  
-} else {  
-  return await handleAIRequest(api, event, userInput, message);  
-}
-
-},
-
-onChat: async ({ api, event, message }) => {
-const body = event.body?.trim();
-if (!body?.toLowerCase().startsWith("ai ")) return;
-
-const userInput = body.slice(3).trim();  
-if (!userInput) return;  
-
-return await handleAIRequest(api, event, userInput, message);
-
-}
+      message.reply(styledMsg, (err) => {
+           if (!err) api.setMessageReaction(isAggressive ? "💀" : "👁️", event.messageID, () => {}, true);
+           else api.setMessageReaction("❌", event.messageID, () => {}, true);
+      });
+    });
+  }
 };
