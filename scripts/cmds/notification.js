@@ -5,12 +5,11 @@ module.exports = {
     name: "notification",
     aliases: ["notify", "noti", "annonce"],
     version: "1.7",
-    author: "NTKhang (Adapté par Gemini)",
+    author: "NTKhang (Stylisé par Gemini)",
     countDown: 5,
-    role: 2, // Réservé à Master Charbel / Admin
+    role: 2, // Réservé aux administrateurs (Master Charbel)
     description: {
-      vi: "Gửi thông báo từ admin đến all box",
-      en: "Diffuse un ordre de l'Anteiku à tous les groupes"
+      en: "Diffuse un message de Master Charbel à tous les secteurs."
     },
     category: "owner",
     guide: {
@@ -23,11 +22,11 @@ module.exports = {
 
   langs: {
     en: {
-      missingMessage: "👁️ L'ordre est vide. Que dois-je transmettre aux autres goules ?",
+      missingMessage: "👁️ 𝑲𝒂𝒏𝒆𝒌𝒊 : L'ordre est vide. Que dois-je transmettre aux autres goules ?",
       notification: "╭─────── ☕ ───────╮\n   📢 𝐎𝐑𝐃𝐑𝐄 𝐃𝐄 𝐋'𝐀𝐍𝐓𝐄𝐈𝐊𝐔 👁️\n╰─────── ☕ ───────╯\n\n📜 𝐌𝐞𝐬𝐬𝐚𝐠𝐞 𝐝𝐞 𝐌𝐚𝐬𝐭𝐞𝐫 𝐂𝐡𝐚𝐫𝐛𝐞𝐥 :\n━━━━━━━━━━━━━━━━━━",
-      sendingNotification: "⏳ Transmission de l'ordre en cours vers %1 secteurs (groupes)...",
-      sentNotification: "✅ L'ordre a été diffusé avec succès dans les secteurs.",
-      errorSendingNotification: "❌ Échec de la transmission dans certains secteurs :\n%2"
+      sendingNotification: "⏳ 𝑻𝒓𝒂𝒏𝒔𝒎𝒊𝒔𝒔𝒊𝒐𝒏 𝒅𝒆 𝒍'𝒐𝒓𝒅𝒓𝒆 𝒗𝒆𝒓𝒔 %1 𝒔𝒆𝒄𝒕𝒆𝒖𝒓𝒔...",
+      sentNotification: "✅ 𝑳'𝒐𝒓𝒅𝒓𝒆 𝒂 𝒆́𝒕𝒆́ 𝒅𝒊𝒇𝒇𝒖𝒔𝒆́ 𝒂𝒗𝒆𝒄 𝒔𝒖𝒄𝒄𝒆̀𝒔.",
+      errorSendingNotification: "❌ 𝑬́𝒄𝒉𝒆𝒄 𝒅𝒆 𝒍𝒂 𝒕𝒓𝒂𝒏𝒔𝒎𝒊𝒔𝒔𝒊𝒐𝒏 :\n%2"
     }
   },
 
@@ -35,9 +34,9 @@ module.exports = {
     const { delayPerGroup } = envCommands[commandName];
     if (!args[0]) return message.reply(getLang("missingMessage"));
 
-    // Design thématique du message diffusé
+    // --- Design du message reçu par les groupes ---
     const formSend = {
-      body: `${getLang("notification")}\n\n『 ${args.join(" ")} 』\n\n━━━━━━━━━━━━━━━━━━\n☕ 𝑷𝒐𝒖𝒓 𝒓𝒆́𝒑𝒐𝒏𝒅𝒓𝒆 𝒂̀ 𝑴𝒂𝒔𝒕𝒆𝒓 𝑪𝒉𝒂𝒓𝒃𝒆𝒍, 𝒖𝒕𝒊𝒍𝒊𝒔𝒆𝒛 𝒍𝒂 𝒄𝒐𝒎𝒎𝒂𝒏𝒅𝒆 𝒄𝒂𝒍𝒍𝒂𝒅.`,
+      body: `${getLang("notification")}\n\n『 ${args.join(" ")} 』\n\n━━━━━━━━━━━━━━━━━━\n☕ 𝑷𝒐𝒖𝒓 𝒄𝒐𝒏𝒕𝒂𝒄𝒕𝒆𝒓 𝑴𝒂𝒔𝒕𝒆𝒓 𝑪𝒉𝒂𝒓𝒃𝒆𝒍, 𝒕𝒂𝒑𝒆𝒛 : -𝒄𝒂𝒍𝒍𝒂𝒅 + 𝒎𝒆𝒔𝒔𝒂𝒈𝒆\n╰━━━━━━━ 🩸 ━━━❖`,
       attachment: await getStreamsFromAttachment(
         [
           ...event.attachments,
@@ -47,6 +46,8 @@ module.exports = {
     };
 
     const allThreadID = (await threadsData.getAll()).filter(t => t.isGroup && t.members.find(m => m.userID == api.getCurrentUserID())?.inGroup);
+    
+    // Message de confirmation au départ
     message.reply(getLang("sendingNotification", allThreadID.length));
 
     let sendSucces = 0;
@@ -84,12 +85,13 @@ module.exports = {
       }
     }
 
-    let msg = "";
+    // --- Message final de résultat ---
+    let resultMsg = "";
     if (sendSucces > 0)
-      msg += `✅ Transmission réussie pour ${sendSucces} groupes.\n`;
+        resultMsg += `✅ 𝑲𝒂𝒏𝒆𝒌𝒊 : 𝑻𝒓𝒂𝒏𝒔𝒎𝒊𝒔𝒔𝒊𝒐𝒏 𝒓𝒆́𝒖𝒔𝒔𝒊𝒆 𝒑𝒐𝒖𝒓 ${sendSucces} 𝒈𝒓𝒐𝒖𝒑𝒆𝒔.\n`;
     if (sendError.length > 0)
-      msg += `⚠️ Erreur pour ${sendError.reduce((a, b) => a + b.threadIDs.length, 0)} groupes.`;
+        resultMsg += `⚠️ 𝑬𝒓𝒓𝒆𝒖𝒓 𝒅𝒆 𝒄𝒐𝒏𝒏𝒆𝒙𝒊𝒐𝒏 𝒅𝒂𝒏𝒔 ${sendError.reduce((a, b) => a + b.threadIDs.length, 0)} 𝒔𝒆𝒄𝒕𝒆𝒖𝒓𝒔.`;
     
-    message.reply(msg);
+    message.reply(resultMsg);
   }
 };
