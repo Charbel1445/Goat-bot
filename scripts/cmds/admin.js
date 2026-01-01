@@ -5,42 +5,30 @@ module.exports = {
 	config: {
 		name: "admin",
 		version: "1.6",
-		author: "NTKhang",
+		author: "Master Charbel",
 		countDown: 5,
 		role: 2,
 		description: {
 			vi: "Thêm, xóa, sửa quyền admin",
-			en: "Add, remove, edit admin role"
+			en: "Gérer la hiérarchie des Goules (Admins)"
 		},
 		category: "box chat",
 		guide: {
-			vi: '   {pn} [add | -a] <uid | @tag>: Thêm quyền admin cho người dùng'
-				+ '\n	  {pn} [remove | -r] <uid | @tag>: Xóa quyền admin của người dùng'
-				+ '\n	  {pn} [list | -l]: Liệt kê danh sách admin',
-			en: '   {pn} [add | -a] <uid | @tag>: Add admin role for user'
-				+ '\n	  {pn} [remove | -r] <uid | @tag>: Remove admin role of user'
-				+ '\n	  {pn} [list | -l]: List all admins'
+			en: '   {pn} [add | -a] <uid | @tag>: Élever au rang de Goule Supérieure'
+				+ '\n	  {pn} [remove | -r] <uid | @tag>: Déchoir un Admin de son rang'
+				+ '\n	  {pn} [list | -l]: Voir les Maîtres de l\'Anteiku'
 		}
 	},
 
 	langs: {
-		vi: {
-			added: "✅ | Đã thêm quyền admin cho %1 người dùng:\n%2",
-			alreadyAdmin: "\n⚠️ | %1 người dùng đã có quyền admin từ trước rồi:\n%2",
-			missingIdAdd: "⚠️ | Vui lòng nhập ID hoặc tag người dùng muốn thêm quyền admin",
-			removed: "✅ | Đã xóa quyền admin của %1 người dùng:\n%2",
-			notAdmin: "⚠️ | %1 người dùng không có quyền admin:\n%2",
-			missingIdRemove: "⚠️ | Vui lòng nhập ID hoặc tag người dùng muốn xóa quyền admin",
-			listAdmin: "👑 | Danh sách admin:\n%1"
-		},
 		en: {
-			added: "✅ | Added admin role for %1 users:\n%2",
-			alreadyAdmin: "\n⚠️ | %1 users already have admin role:\n%2",
-			missingIdAdd: "⚠️ | Please enter ID or tag user to add admin role",
-			removed: "✅ | Removed admin role of %1 users:\n%2",
-			notAdmin: "⚠️ | %1 users don't have admin role:\n%2",
-			missingIdRemove: "⚠️ | Please enter ID or tag user to remove admin role",
-			listAdmin: "👑 | List of admins:\n%1"
+			added: "🩸 | **ÉLÉVATION DE RANG**\n━━━━━━━━━━━━━━━━━━━\nL'autorité a été accordée à %1 membre(s) :\n%2\n\n✨ *Kaneki : 'Leur force appartient désormais à l'organisation.'*",
+			alreadyAdmin: "\n⚠️ | %1 membre(s) possèdent déjà des Cellules RC de classe Admin :\n%2",
+			missingIdAdd: "❌ | **ERREUR**\nQui doit rejoindre le sommet ? Identifiez une cible ou entrez un UID.",
+			removed: "💀 | **RÉVOCATION**\n━━━━━━━━━━━━━━━━━━━\nLe grade de %1 membre(s) a été réduit en poussière :\n%2\n\n👁️ *'Tu n'es plus qu'une proie.'*",
+			notAdmin: "⚠️ | %1 membre(s) ne font pas partie de l'élite :\n%2",
+			missingIdRemove: "❌ | **ERREUR**\nQui doit être banni de la hiérarchie ?",
+			listAdmin: "👑 | **CONSEIL DES GOULES (Rang SSS)**\n━━━━━━━━━━━━━━━━━━━\nVoici les maîtres de ce monde :\n%1"
 		}
 	},
 
@@ -81,7 +69,7 @@ module.exports = {
 				if (args[1]) {
 					let uids = [];
 					if (Object.keys(event.mentions).length > 0)
-						uids = Object.keys(event.mentions)[0];
+						uids = Object.keys(event.mentions); // Correction ici pour accepter plusieurs tags
 					else
 						uids = args.filter(arg => !isNaN(arg));
 					const notAdminIds = [];
